@@ -60,7 +60,7 @@ jobs:
 
   docker-mr:
     if: github.event_name == 'pull_request'
-    needs: [checkstyle, test, build]
+    needs: [build]
     runs-on: ubuntu-latest
 
     steps:
