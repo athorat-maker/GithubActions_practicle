@@ -1,129 +1,103 @@
 name: Spring Petclinic CI
 
 on:
-pull_request:
-branches:
-- main
+  pull_request:
+    branches:
+      - main
 
-push:
-branches:
-- main
+  push:
+    branches:
+      - main
 
 jobs:
+  checkstyle:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
 
-checkstyle:
-if: github.event_name == 'pull_request'
+    container:
+      image: maven:3.8.5-openjdk-17
 
-```
-runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-container:
-  image: maven:3.8.5-openjdk-17
+      - name: Run Checkstyle
+        run: mvn checkstyle:checkstyle
 
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+      - name: Upload Checkstyle Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkstyle-report
+          path: target/**
 
-  - name: Run Checkstyle
-    run: mvn checkstyle:checkstyle
+  test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
 
-  - name: Upload Checkstyle Report
-    uses: actions/upload-artifact@v4
-    with:
-      name: checkstyle-report
-      path: target/**
-```
+    container:
+      image: maven:3.8.5-openjdk-17
 
-test:
-if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
 
-```
-runs-on: ubuntu-latest
+      - name: Run Tests
+        run: mvn test
 
-container:
-  image: maven:3.8.5-openjdk-17
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
 
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+    container:
+      image: maven:3.8.5-openjdk-17
 
-  - name: Run Tests
-    run: mvn test
-```
+    steps:
+      - uses: actions/checkout@v4
 
-build:
-if: github.event_name == 'pull_request'
+      - name: Build Application
+        run: mvn clean package -DskipTests
 
-```
-runs-on: ubuntu-latest
+  docker-mr:
+    if: github.event_name == 'pull_request'
+    needs: [checkstyle, test, build]
+    runs-on: ubuntu-latest
 
-container:
-  image: maven:3.8.5-openjdk-17
+    steps:
+      - uses: actions/checkout@v4
 
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+      - name: Get Commit SHA
+        run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-  - name: Build Application
-    run: mvn clean package -DskipTests
-```
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-docker-mr:
-if: github.event_name == 'pull_request'
+      - name: Build and Push MR Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: athorat2003/actions_mr:${{ env.SHA_SHORT }}
 
-```
-needs:
-  - checkstyle
-  - test
-  - build
+  docker-main:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
 
-runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+      - name: Get Commit SHA
+        run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-  - name: Get Commit SHA
-    run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-  - name: Login to Docker Hub
-    uses: docker/login-action@v3
-    with:
-      username: ${{ secrets.DOCKER_USERNAME }}
-      password: ${{ secrets.DOCKER_PASSWORD }}
-
-  - name: Build and Push MR Image
-    uses: docker/build-push-action@v6
-    with:
-      context: .
-      push: true
-      tags: athorat2003/actions_mr:${{ env.SHA_SHORT }}
-```
-
-docker-main:
-if: github.event_name == 'push'
-
-```
-runs-on: ubuntu-latest
-
-steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
-
-  - name: Get Commit SHA
-    run: echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-  - name: Login to Docker Hub
-    uses: docker/login-action@v3
-    with:
-      username: ${{ secrets.DOCKER_USERNAME }}
-      password: ${{ secrets.DOCKER_PASSWORD }}
-
-  - name: Build and Push Main Image
-    uses: docker/build-push-action@v6
-    with:
-      context: .
-      push: true
-      tags: athorat2003/actions_main:${{ env.SHA_SHORT }}
-```
-
+      - name: Build and Push Main Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: athorat2003/actions_main:${{ env.SHA_SHORT }}
